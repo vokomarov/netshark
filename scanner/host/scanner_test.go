@@ -133,7 +133,7 @@ func TestScanner_AddHost(t *testing.T) {
 		MAC: "ff:ff:ff:ff:ff:ff",
 	}
 
-	scanner.AddHost(&host)
+	scanner.addHost(&host)
 
 	if len(scanner.Hosts) != 1 {
 		t.Errorf("Host is not added")
@@ -172,13 +172,13 @@ func TestScanner_HasHost(t *testing.T) {
 		MAC: "ff:ff:ff:ff:ff:ff",
 	}
 
-	if scanner.HasHost(&host) {
+	if scanner.hasHost(&host) {
 		t.Errorf("Host is wrongly detected as already added")
 	}
 
-	scanner.AddHost(&host)
+	scanner.addHost(&host)
 
-	if !scanner.HasHost(&host) {
+	if !scanner.hasHost(&host) {
 		t.Errorf("Host is not registered as already addded")
 	}
 }

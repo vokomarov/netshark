@@ -10,8 +10,8 @@ import (
 var parser *flags.Parser
 
 type scanCommand struct {
-	HostsCommand HostsCommand `command:"hosts" description:"Scan all available neighbor hosts of current local network"`
-	PortsCommand PortsCommand `command:"ports" description:"Scan open ports on a host"`
+	HostsCommand hostsCommand `command:"hosts" description:"Scan all available neighbor hosts of current local network"`
+	PortsCommand portsCommand `command:"ports" description:"Scan open ports on a host"`
 }
 
 func registerCommands(parser *flags.Parser) {

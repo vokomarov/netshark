@@ -9,11 +9,11 @@ import (
 	"github.com/vokomarov/netshark/scanner/host"
 )
 
-type HostsCommand struct {
+type hostsCommand struct {
 	Timeout int `short:"t" long:"timeout" default:"5" description:"Timeout in seconds to wait for ARP responses."`
 }
 
-func (c *HostsCommand) Execute(_ []string) error {
+func (c *hostsCommand) Execute(_ []string) error {
 	fmt.Printf("Scanning Hosts..\n")
 
 	quit := make(chan os.Signal, 1)

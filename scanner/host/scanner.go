@@ -13,6 +13,8 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
+// Scanner provide container for control local network scanning
+// process and checking results
 type Scanner struct {
 	mu      sync.RWMutex
 	unique  map[string]bool
@@ -24,6 +26,7 @@ type Scanner struct {
 	Error   error
 }
 
+// NewScanner will initialise new instance of Scanner
 func NewScanner() *Scanner {
 	return &Scanner{
 		mu:      sync.RWMutex{},
@@ -36,6 +39,9 @@ func NewScanner() *Scanner {
 	}
 }
 
+// Stop perform manually stopping of scan process with blocking
+// until stopping is not finished in case of scanning already started
+// Safe to call before or after scanning started or stopped
 func (s *Scanner) Stop() {
 	if s.started {
 		s.stop <- struct{}{}
@@ -64,7 +70,7 @@ func (s *Scanner) finish(err error) {
 	}
 }
 
-func (s *Scanner) HasHost(host *Host) bool {
+func (s *Scanner) hasHost(host *Host) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -75,8 +81,7 @@ func (s *Scanner) HasHost(host *Host) bool {
 	return false
 }
 
-// Push new detected Host to the list of all detected
-func (s *Scanner) AddHost(host *Host) *Scanner {
+func (s *Scanner) addHost(host *Host) *Scanner {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -86,9 +91,10 @@ func (s *Scanner) AddHost(host *Host) *Scanner {
 	return s
 }
 
-// Detect system interfaces and go over each one to detect IP addresses
-// and read/write ARP packets
+// Scan will detect system interfaces and go over each one to detect
+// IP addresses to read/write ARP packets
 // Blocked until every interfaces unable to write packets or stop call
+// so typically should be run as a goroutine
 func (s *Scanner) Scan() {
 	interfaces, err := net.Interfaces()
 	if err != nil {
@@ -216,8 +222,8 @@ func (s *Scanner) listenARP(handle *pcap.Handle, iface *net.Interface) {
 				MAC: fmt.Sprintf("%v", net.HardwareAddr(arp.SourceHwAddress)),
 			}
 
-			if !s.HasHost(&host) {
-				s.AddHost(&host)
+			if !s.hasHost(&host) {
+				s.addHost(&host)
 			}
 		}
 	}
