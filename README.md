@@ -1,5 +1,5 @@
 # netshark
-[![Build Status](https://travis-ci.org/vokomarov/netshark.svg?branch=master)](https://travis-ci.org/vokomarov/netshark)
+[![Build Status](https://travis-ci.com/vokomarov/netshark.svg?branch=master)](https://travis-ci.com/vokomarov/netshark)
 [![Coverage Status](https://coveralls.io/repos/github/vokomarov/netshark/badge.svg?branch=master)](https://coveralls.io/github/vokomarov/netshark?branch=master)
 [![GoDoc](https://godoc.org/github.com/vokomarov/netshark?status.svg)](https://godoc.org/github.com/vokomarov/netshark)
 [![Go Report Card](https://goreportcard.com/badge/github.com/vokomarov/netshark)](https://goreportcard.com/report/github.com/vokomarov/netshark)
