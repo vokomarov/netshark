@@ -4,7 +4,7 @@ go:
   - '1.14'
 
 before_install:
-  - sudo apt-get install libpcap-dev tar
+  - sudo apt-get install libpcap-dev
 
 install:
   - go get golang.org/x/tools/cmd/cover
@@ -26,8 +26,8 @@ script:
   - make
   - cd ..
 
-  - CGO_ENABLED=0 GOARCH=386 GOOS=linux CGO_LDFLAGS+="-L./libpcap-$PCAPV" go build -ldflags="-s -w" -o out/netshark_linux_i686 .
-  - CGO_ENABLED=0 GOARCH=amd64 GOOS=linux CGO_LDFLAGS+="-L./libpcap-$PCAPV" go build -ldflags="-s -w" -o out/netshark_linux_x86-64 .
+  - CGO_ENABLED=1 GOARCH=386 GOOS=linux CGO_LDFLAGS+="-L./libpcap-$PCAPV" go build -ldflags="-s -w" -o out/netshark_linux_i686 .
+  - CGO_ENABLED=1 GOARCH=amd64 GOOS=linux CGO_LDFLAGS+="-L./libpcap-$PCAPV" go build -ldflags="-s -w" -o out/netshark_linux_x86-64 .
 
   - GOARCH=amd64 GOOS=darwin go build --ldflags "-L ./libpcap-$PCAPV -linkmode external -extldflags \"-static\"" -a -o out/netshark_osx .
 
