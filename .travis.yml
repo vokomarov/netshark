@@ -4,7 +4,7 @@ go:
   - '1.14'
 
 before_install:
-  - sudo apt-get install libpcap-dev
+  - sudo apt-get install libpcap-dev tag
 
 install:
   - go get golang.org/x/tools/cmd/cover
