@@ -4,10 +4,11 @@ import (
 	"fmt"
 )
 
-type PortsCommand struct {
+type portsCommand struct {
 }
 
-func (c *PortsCommand) Execute(_ []string) error {
+// Execute will run the command
+func (c *portsCommand) Execute(_ []string) error {
 	fmt.Printf("Scanning Ports..\n")
 	return nil
 }
