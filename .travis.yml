@@ -20,15 +20,15 @@ script:
   - export PCAPV=1.9.1
   - wget http://www.tcpdump.org/release/libpcap-$PCAPV.tar.gz
   - tar xvf libpcap-$PCAPV.tar.gz
-
   - cd libpcap-$PCAPV
   - ./configure --with-pcap=linux
   - make
   - cd ..
 
   - CGO_ENABLED=1 GOARCH=amd64 GOOS=linux CGO_LDFLAGS+="-L./libpcap-$PCAPV" go build -ldflags="-s -w" -o out/netshark_linux_x86-64 .
-#  - CGO_ENABLED=1 GOARCH=amd64 GOOS=darwin CGO_LDFLAGS+="-L./libpcap-$PCAPV" go build -ldflags="-s -w" -o out/netshark_osx .
-  - CGO_ENABLED=0 GOARCH=amd64 GOOS=darwin go build --ldflags "-L ./libpcap-$PCAPV -linkmode external -extldflags \"-static\"" -a -o out/netshark_osx .
+
+  # TODO. MacOS build
+  # - GOARCH=amd64 GOOS=darwin go build -o out/netshark_osx .
 
   - GOARCH=386 GOOS=windows go build -o out/netshark_win32.exe .
   - GOARCH=amd64 GOOS=windows go build -o out/netshark_win64.exe .
