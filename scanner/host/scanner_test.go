@@ -46,13 +46,9 @@ func TestScanner_StopEmpty(t *testing.T) {
 
 	scanner.Stop()
 
-	ok := true
 	select {
-	case _, ok = <-scanner.stop:
+	case <-scanner.stop:
 	default:
-	}
-
-	if ok {
 		t.Errorf("stop channel must be closed once Stop method called")
 	}
 }
@@ -67,42 +63,29 @@ func TestScanner_StopStartedStopped(t *testing.T) {
 	go scanner.Scan()
 	scanner.Stop()
 
-	ok := true
 	select {
-	case _, ok = <-scanner.stop:
+	case <-scanner.stop:
 	default:
-	}
-
-	if ok {
 		t.Errorf("stop channel must be closed once Stop method called")
 	}
 
-	ok = true
 	select {
-	case _, ok = <-scanner.Done:
+	case <-scanner.Done:
 	default:
-	}
-	if ok {
 		t.Errorf("done channel must be closed once Stop method finished")
 	}
 
 	scanner.Stop()
 
-	ok = true
 	select {
-	case _, ok = <-scanner.stop:
+	case <-scanner.stop:
 	default:
-	}
-	if ok {
 		t.Errorf("stop channel must be closed once Stop method called")
 	}
 
-	ok = true
 	select {
-	case _, ok = <-scanner.Done:
+	case <-scanner.Done:
 	default:
-	}
-	if ok {
 		t.Errorf("done channel must be closed once Stop method finished")
 	}
 }
@@ -117,33 +100,23 @@ func TestScanner_StopWorking(t *testing.T) {
 	// simulate fake scanner
 	go func(s *Scanner) {
 		s.started = true
-
-		select {
-		case <-s.stop:
-			s.finish(nil)
-		}
+		<-s.stop
+		s.finish(nil)
 	}(scanner)
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(1 * time.Millisecond)
 
 	scanner.Stop()
 
-	ok := true
 	select {
-	case _, ok = <-scanner.stop:
+	case <-scanner.stop:
 	default:
-	}
-
-	if ok {
 		t.Errorf("stop channel must be closed once Stop method called")
 	}
 
-	ok = true
 	select {
-	case _, ok = <-scanner.Done:
+	case <-scanner.Done:
 	default:
-	}
-	if ok {
 		t.Errorf("done channel must be closed once Stop method finished")
 	}
 }
