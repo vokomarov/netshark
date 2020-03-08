@@ -1,0 +1,31 @@
+language: go
+
+go:
+  - '1.14'
+
+install:
+  - go get golang.org/x/tools/cmd/cover
+  - go get github.com/mattn/goveralls
+  - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.23.6
+
+script:
+  - go test ./... -v -covermode=count -coverprofile=coverage.out
+  - cat coverage.out | grep -v "main.go" | grep -v "hosts.go" | grep -v "ports.go" > cover.out
+  - goveralls -coverprofile=cover.out -service=travis-ci
+  - golangci-lint run
+
+  - CGO_ENABLED=0 GOARCH=386 GOOS=linux go build -o out/netshark_linux_i686 .
+  - CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build -o out/netshark_linux_x86-64 .
+  - GOARCH=amd64 GOOS=darwin go build -o out/netshark_osx .
+  - GOARCH=386 GOOS=windows go build -o out/netshark_win32.exe .
+  - GOARCH=amd64 GOOS=windows go build -o out/netshark_win64.exe .
+
+deploy:
+  provider: releases
+  api_key:
+    secure: $GITHUB_API_KEY_SECURE
+  file_glob: true
+  file: out/*
+  skip_cleanup: true
+  on:
+    tags: true
