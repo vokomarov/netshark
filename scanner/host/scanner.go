@@ -14,28 +14,43 @@ import (
 )
 
 type Scanner struct {
-	mu     sync.RWMutex
-	unique map[string]bool
-	Hosts  []*Host
-	stop   chan struct{}
-	Done   chan struct{}
-	Error  error
+	mu      sync.RWMutex
+	unique  map[string]bool
+	Hosts   []*Host
+	started bool
+	stopped bool
+	stop    chan struct{}
+	Done    chan struct{}
+	Error   error
 }
 
 func NewScanner() *Scanner {
 	return &Scanner{
-		mu:     sync.RWMutex{},
-		stop:   make(chan struct{}),
-		unique: make(map[string]bool),
-		Hosts:  make([]*Host, 0),
-		Done:   make(chan struct{}),
+		mu:      sync.RWMutex{},
+		started: false,
+		stopped: false,
+		stop:    make(chan struct{}),
+		unique:  make(map[string]bool),
+		Hosts:   make([]*Host, 0),
+		Done:    make(chan struct{}),
 	}
 }
 
 func (s *Scanner) Stop() {
-	s.stop <- struct{}{}
-	close(s.stop)
-	<-s.Done
+	if s.started {
+		s.stop <- struct{}{}
+		<-s.Done
+	}
+
+	if !s.stopped {
+		close(s.stop)
+
+		if !s.started {
+			close(s.Done)
+		}
+	}
+
+	s.stopped = true
 }
 
 func (s *Scanner) finish(err error) {
@@ -43,8 +58,10 @@ func (s *Scanner) finish(err error) {
 		s.Error = err
 	}
 
-	s.Done <- struct{}{}
-	close(s.Done)
+	if s.started && !s.stopped {
+		s.Done <- struct{}{}
+		close(s.Done)
+	}
 }
 
 func (s *Scanner) HasHost(host *Host) bool {
@@ -161,6 +178,12 @@ func (s *Scanner) scanInterface(iface *net.Interface) error {
 // Push new Host once any correct response received
 // Work until 'stop' is closed.
 func (s *Scanner) listenARP(handle *pcap.Handle, iface *net.Interface) {
+	s.mu.Lock()
+	if !s.started {
+		s.started = true
+	}
+	s.mu.Unlock()
+
 	src := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)
 	in := src.Packets()
 
