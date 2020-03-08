@@ -36,7 +36,7 @@ script:
 deploy:
   provider: releases
   api_key:
-    secure: $GITHUB_API_KEY_SECURE
+    secure: "$GITHUB_API_KEY_SECURE"
   file_glob: true
   file: out/*
   skip_cleanup: true
