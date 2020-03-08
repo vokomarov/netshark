@@ -13,6 +13,7 @@ type hostsCommand struct {
 	Timeout int `short:"t" long:"timeout" default:"5" description:"Timeout in seconds to wait for ARP responses."`
 }
 
+// Execute will run the command
 func (c *hostsCommand) Execute(_ []string) error {
 	fmt.Printf("Scanning Hosts..\n")
 

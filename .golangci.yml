@@ -1,6 +1,8 @@
 service:
   analyzed-paths:
     - scanner/...
-  golangci-lint-version: 1.12.x
+  golangci-lint-version: 1.23.x
   prepare:
-    - sudo apt-get install libpcap-dev
+    - apt-get update && apt-get install -y libpcap-dev
+  suggested-changes:
+    disabled: true

@@ -33,11 +33,11 @@ func main() {
 		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 			return
-		} else {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
-			return
 		}
+
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+		return
 	}
 
 	os.Exit(0)
