@@ -17,9 +17,24 @@ script:
   - goveralls -coverprofile=cover.out -service=travis-ci
   - golangci-lint run
 
-  - CGO_ENABLED=0 GOARCH=386 GOOS=linux go build -o out/netshark_linux_i686 .
-  - CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build -o out/netshark_linux_x86-64 .
-  - GOARCH=amd64 GOOS=darwin go build -o out/netshark_osx .
+  - export PCAPV=1.9.1
+  - wget http://www.tcpdump.org/release/libpcap-$PCAPV.tar.gz && \
+    tar xvf libpcap-$PCAPV.tar.gz && \
+    cd libpcap-$PCAPV && \
+    ./configure --with-pcap=linux && \
+    make && \
+    cd ..
+
+  - CGO_ENABLED=0 GOARCH=386 GOOS=linux go build --ldflags "-L ./libpcap-$PCAPV -linkmode external -extldflags \"-static\"" -a -o out/netshark_linux_i686 .
+  - CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build --ldflags "-L ./libpcap-$PCAPV -linkmode external -extldflags \"-static\"" -a -o out/netshark_linux_x86-64 .
+
+  - cd libpcap-$PCAPV && \
+    ./configure --with-pcap=linux && \
+    make && \
+    cd ..
+
+  - GOARCH=amd64 GOOS=darwin go build --ldflags "-L ./libpcap-$PCAPV -linkmode external -extldflags \"-static\"" -a -o out/netshark_osx .
+
   - GOARCH=386 GOOS=windows go build -o out/netshark_win32.exe .
   - GOARCH=amd64 GOOS=windows go build -o out/netshark_win64.exe .
 
