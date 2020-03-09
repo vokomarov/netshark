@@ -2,6 +2,7 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -16,79 +17,64 @@ import (
 // Scanner provide container for control local network scanning
 // process and checking results
 type Scanner struct {
-	mu      sync.RWMutex
-	unique  map[string]bool
-	Hosts   []*Host
-	started bool
-	stopped bool
-	stop    chan struct{}
-	Done    chan struct{}
-	Error   error
+	mu         sync.RWMutex
+	ctx        context.Context
+	cancelFunc context.CancelFunc
+	found      chan *Host
+	unique     map[string]bool
+	Error      error
 }
 
 // NewScanner will initialise new instance of Scanner
 func NewScanner() *Scanner {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
 	return &Scanner{
-		mu:      sync.RWMutex{},
-		started: false,
-		stopped: false,
-		stop:    make(chan struct{}),
-		unique:  make(map[string]bool),
-		Hosts:   make([]*Host, 0),
-		Done:    make(chan struct{}),
+		mu:         sync.RWMutex{},
+		ctx:        ctx,
+		cancelFunc: cancelFunc,
+		found:      make(chan *Host),
+		unique:     make(map[string]bool),
 	}
 }
 
-// Stop perform manually stopping of scan process with blocking
-// until stopping is not finished in case of scanning already started
-// Safe to call before or after scanning started or stopped
-func (s *Scanner) Stop() {
-	if s.started {
-		s.stop <- struct{}{}
-		<-s.Done
-	}
+// Ctx wrap given context and return new with cancel func
+func (s *Scanner) Ctx(ctx context.Context) (context.Context, context.CancelFunc) {
+	s.ctx, s.cancelFunc = context.WithCancel(ctx)
 
-	if !s.stopped {
-		close(s.stop)
-
-		if !s.started {
-			close(s.Done)
-		}
-	}
-
-	s.stopped = true
+	return s.ctx, s.cancelFunc
 }
 
-func (s *Scanner) finish(err error) {
-	if err != nil {
-		s.Error = err
-	}
-
-	if s.started && !s.stopped {
-		s.Done <- struct{}{}
-		close(s.Done)
-	}
+// Hosts will return a read only channel to receive found Host
+func (s *Scanner) Hosts() <-chan *Host {
+	return s.found
 }
 
-func (s *Scanner) hasHost(host *Host) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if _, ok := s.unique[host.ID()]; ok {
-		return true
-	}
-
-	return false
-}
-
-func (s *Scanner) addHost(host *Host) *Scanner {
+func (s *Scanner) fail(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.Hosts = append(s.Hosts, host)
-	s.unique[host.ID()] = true
+	s.Error = err
 
-	return s
+	if s.ctx.Err() == nil {
+		s.cancelFunc()
+	}
+}
+
+func (s *Scanner) foundHost(host *Host) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.ctx.Err() != nil {
+		return false
+	}
+
+	if _, ok := s.unique[host.ID()]; !ok {
+		s.unique[host.ID()] = true
+		s.found <- host
+	}
+
+	return true
 }
 
 // Scan will detect system interfaces and go over each one to detect
@@ -98,7 +84,7 @@ func (s *Scanner) addHost(host *Host) *Scanner {
 func (s *Scanner) Scan() {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		s.finish(err)
+		s.fail(err)
 		return
 	}
 
@@ -111,16 +97,15 @@ func (s *Scanner) Scan() {
 			defer wg.Done()
 
 			if err := s.scanInterface(&iface); err != nil {
-				s.finish(fmt.Errorf("interface [%v] error: %w", iface.Name, err))
+				s.fail(fmt.Errorf("interface [%v] error: %w", iface.Name, err))
 				return
 			}
 		}(interfaces[i])
 	}
 
-	// Wait for all interfaces' scans to complete.  They'll try to run
-	// forever, but will stop on an error, so if we get past this Wait
-	// it means all attempts to write have failed.
 	wg.Wait()
+
+	close(s.found)
 }
 
 // Scans an individual interface's local network for machines using ARP requests/replies.
@@ -131,19 +116,22 @@ func (s *Scanner) scanInterface(iface *net.Interface) error {
 	// We just look for IPv4 addresses, so try to find if the interface has one.
 	var addr *net.IPNet
 
-	if addresses, err := iface.Addrs(); err != nil {
+	addresses, err := iface.Addrs()
+	if err != nil {
 		return err
-	} else {
-		for _, a := range addresses {
-			if IPNet, ok := a.(*net.IPNet); ok {
-				if IPv4 := IPNet.IP.To4(); IPv4 != nil {
-					addr = &net.IPNet{
-						IP:   IPv4,
-						Mask: IPNet.Mask[len(IPNet.Mask)-4:],
-					}
+	}
 
-					break
-				}
+	for _, a := range addresses {
+		if IPNet, ok := a.(*net.IPNet); ok {
+			IPv4 := IPNet.IP.To4()
+
+			if IPv4 == nil {
+				continue
+			}
+
+			addr = &net.IPNet{
+				IP:   IPv4,
+				Mask: IPNet.Mask[len(IPNet.Mask)-4:],
 			}
 		}
 	}
@@ -176,7 +164,15 @@ func (s *Scanner) scanInterface(iface *net.Interface) error {
 		// We don't know exactly how long it'll take for packets to be
 		// sent back to us, but 10 seconds should be more than enough
 		// time ;)
-		time.Sleep(10 * time.Second)
+
+		timeout := time.NewTicker(10 * time.Second)
+
+		select {
+		case <-timeout.C:
+			continue
+		case <-s.ctx.Done():
+			return nil
+		}
 	}
 }
 
@@ -184,12 +180,6 @@ func (s *Scanner) scanInterface(iface *net.Interface) error {
 // Push new Host once any correct response received
 // Work until 'stop' is closed.
 func (s *Scanner) listenARP(handle *pcap.Handle, iface *net.Interface) {
-	s.mu.Lock()
-	if !s.started {
-		s.started = true
-	}
-	s.mu.Unlock()
-
 	src := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)
 	in := src.Packets()
 
@@ -197,8 +187,7 @@ func (s *Scanner) listenARP(handle *pcap.Handle, iface *net.Interface) {
 		var packet gopacket.Packet
 
 		select {
-		case <-s.stop:
-			s.finish(nil)
+		case <-s.ctx.Done():
 			return
 		case packet = <-in:
 			arpLayer := packet.Layer(layers.LayerTypeARP)
@@ -217,13 +206,11 @@ func (s *Scanner) listenARP(handle *pcap.Handle, iface *net.Interface) {
 			// Note:  we might get some packets here that aren't responses to ones we've sent,
 			// if for example someone else sends US an ARP request.  Doesn't much matter, though...
 			// all information is good information :)
-			host := Host{
+			if !s.foundHost(&Host{
 				IP:  fmt.Sprintf("%v", net.IP(arp.SourceProtAddress)),
 				MAC: fmt.Sprintf("%v", net.HardwareAddr(arp.SourceHwAddress)),
-			}
-
-			if !s.hasHost(&host) {
-				s.addHost(&host)
+			}) {
+				return
 			}
 		}
 	}
@@ -277,7 +264,7 @@ func writeARP(handle *pcap.Handle, iface *net.Interface, addr *net.IPNet) error 
 
 // ips is a simple and not very good method for getting all IPv4 addresses from a
 // net.IPNet.  It returns all IPs it can over the channel it sends back, closing
-// the channel when done.
+// the channel when fail.
 func ips(n *net.IPNet) (out []net.IP) {
 	num := binary.BigEndian.Uint32([]byte(n.IP))
 	mask := binary.BigEndian.Uint32([]byte(n.Mask))

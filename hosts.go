@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -21,45 +22,26 @@ func (c *hostsCommand) Execute(_ []string) error {
 	signal.Notify(quit, os.Interrupt)
 
 	scanner := host.NewScanner()
+	_, stopFunc := scanner.Ctx(context.Background())
 
 	go scanner.Scan()
 
-	timeout := time.NewTicker(time.Duration(c.Timeout) * time.Second)
+	go func() {
+		timeout := time.NewTicker(time.Duration(c.Timeout) * time.Second)
 
-	func() {
-		for {
-			fmt.Printf("found %d hosts...\r", len(scanner.Hosts))
-
-			time.Sleep(1 * time.Second)
-
-			select {
-			case <-timeout.C:
-				scanner.Stop()
-				return
-			case <-quit:
-				scanner.Stop()
-				return
-			case <-scanner.Done:
-
-				return
-			default:
-			}
+		select {
+		case <-timeout.C:
+			stopFunc()
+			return
+		case <-quit:
+			stopFunc()
+			return
 		}
 	}()
 
-	// Clear line
-	fmt.Printf("%c[2K\r", 27)
-
-	if scanner.Error != nil {
-		fmt.Printf("\n\r")
-		return scanner.Error
-	}
-
-	fmt.Printf("\nFound %d hosts:   \n", len(scanner.Hosts))
-
-	for _, h := range scanner.Hosts {
+	for h := range scanner.Hosts() {
 		fmt.Printf("  [IP: %s] \t [MAC: %s] \n", h.IP, h.MAC)
 	}
 
-	return nil
+	return scanner.Error
 }

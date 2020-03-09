@@ -1,6 +1,9 @@
 package host
 
 import (
+	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -16,169 +19,155 @@ func TestNewScanner(t *testing.T) {
 		t.Errorf("Unique host registry is not initialised")
 	}
 
-	if scanner.started == true {
-		t.Errorf("Scanner has wrong started flag")
+	if scanner.ctx == nil {
+		t.Errorf("Context is not initialised")
 	}
 
-	if scanner.stopped == true {
-		t.Errorf("Scanner has wrong stopped flag")
+	if scanner.cancelFunc == nil {
+		t.Errorf("Cancel func is not initialised")
 	}
 
-	if scanner.Hosts == nil {
-		t.Errorf("Host storage is not initialised")
+	if scanner.found == nil {
+		t.Errorf("Found channel is not initialised")
 	}
 
-	if scanner.Done == nil {
-		t.Errorf("Done channel is not created")
-	}
-
-	if scanner.stop == nil {
-		t.Errorf("Stop channel is not created")
+	if scanner.Error != nil {
+		t.Errorf("Error is not empty")
 	}
 }
 
-func TestScanner_StopEmpty(t *testing.T) {
+func TestScanner_Ctx(t *testing.T) {
 	scanner := NewScanner()
 	if scanner == nil {
 		t.Errorf("Scanner instance is empty")
 		return
 	}
 
-	scanner.Stop()
+	ctx, cancelFunc := scanner.Ctx(context.Background())
+	if ctx == nil {
+		t.Errorf("Wrapped context is empty")
+		return
+	}
 
-	select {
-	case <-scanner.stop:
-	default:
-		t.Errorf("stop channel must be closed once Stop method called")
+	if cancelFunc == nil {
+		t.Errorf("Cancel func is empty")
+		return
+	}
+
+	if scanner.ctx != ctx {
+		t.Errorf("Context is not equal")
+	}
+
+	if scanner.ctx.Err() != nil {
+		t.Errorf("Context is already closed")
+	}
+
+	cancelFunc()
+
+	if scanner.ctx.Err() == nil {
+		t.Errorf("Context is not closed")
 	}
 }
 
-func TestScanner_StopStartedStopped(t *testing.T) {
+func TestScanner_Hosts(t *testing.T) {
 	scanner := NewScanner()
 	if scanner == nil {
 		t.Errorf("Scanner instance is empty")
 		return
 	}
+
+	channel := scanner.Hosts()
+	if channel == nil {
+		t.Errorf("Result hosts channel is empty")
+	}
+
+	host := Host{
+		IP:  "127.0.0.1",
+		MAC: "ff:ff:ff:ff:ff:ff",
+	}
+
+	go func() {
+		for host := range channel {
+			if host == nil {
+				t.Errorf("Received nil host")
+				return
+			}
+
+			if host.IP != "127.0.0.1" {
+				t.Errorf("Received host IP is not same as input")
+				return
+			}
+
+			if host.MAC != "ff:ff:ff:ff:ff:ff" {
+				t.Errorf("Received host IP is not same as input")
+				return
+			}
+		}
+	}()
+
+	scanner.foundHost(&host)
+	close(scanner.found)
+}
+
+func TestScanner_Scan(t *testing.T) {
+	scanner := NewScanner()
+	if scanner == nil {
+		t.Errorf("Scanner instance is empty")
+		return
+	}
+
+	_, stopFunc := scanner.Ctx(context.Background())
 
 	go scanner.Scan()
-	scanner.Stop()
 
-	select {
-	case <-scanner.stop:
-	default:
-		t.Errorf("stop channel must be closed once Stop method called")
+	go func() {
+		<-time.NewTicker(2 * time.Second).C
+		stopFunc()
+	}()
+
+	hosts := make([]*Host, 0)
+
+	for h := range scanner.Hosts() {
+		hosts = append(hosts, h)
 	}
 
-	select {
-	case <-scanner.Done:
-	default:
-		t.Errorf("done channel must be closed once Stop method finished")
+	if len(scanner.unique) != len(hosts) {
+		t.Errorf("Some of found hosts is not registered")
 	}
 
-	scanner.Stop()
-
-	select {
-	case <-scanner.stop:
-	default:
-		t.Errorf("stop channel must be closed once Stop method called")
-	}
-
-	select {
-	case <-scanner.Done:
-	default:
-		t.Errorf("done channel must be closed once Stop method finished")
+	if scanner.foundHost(&Host{}) {
+		t.Errorf("Registering host after stop scanning must be failed")
 	}
 }
 
-func TestScanner_StopWorking(t *testing.T) {
+func TestScanner_ScanFail(t *testing.T) {
 	scanner := NewScanner()
 	if scanner == nil {
 		t.Errorf("Scanner instance is empty")
 		return
 	}
 
-	// simulate fake scanner
-	go func(s *Scanner) {
-		s.started = true
-		<-s.stop
-		s.finish(nil)
-	}(scanner)
+	err := fmt.Errorf("test error")
 
-	time.Sleep(1 * time.Millisecond)
+	go scanner.Scan()
 
-	scanner.Stop()
+	go func() {
+		<-time.NewTicker(2 * time.Second).C
+		scanner.fail(err)
+	}()
 
-	select {
-	case <-scanner.stop:
-	default:
-		t.Errorf("stop channel must be closed once Stop method called")
+	for range scanner.Hosts() {
 	}
 
-	select {
-	case <-scanner.Done:
-	default:
-		t.Errorf("done channel must be closed once Stop method finished")
-	}
-}
+	if scanner.Error != nil {
+		if strings.Contains(scanner.Error.Error(), "permission") {
+			t.Skipf("run tests with sudo to allow scan interface")
+			return
+		}
 
-func TestScanner_AddHost(t *testing.T) {
-	scanner := NewScanner()
-	if scanner == nil {
-		t.Errorf("Scanner instance is empty")
-		return
+		if scanner.Error != err {
+			t.Errorf("Error is not propagated")
+		}
 	}
 
-	host := Host{
-		IP:  "127.0.0.1",
-		MAC: "ff:ff:ff:ff:ff:ff",
-	}
-
-	scanner.addHost(&host)
-
-	if len(scanner.Hosts) != 1 {
-		t.Errorf("Host is not added")
-	}
-
-	if host.ID() != scanner.Hosts[0].ID() {
-		t.Errorf("Host is added but changed")
-	}
-
-	if host.IP != scanner.Hosts[0].IP {
-		t.Errorf("Host is added but changed IP")
-	}
-
-	if host.MAC != scanner.Hosts[0].MAC {
-		t.Errorf("Host is added but changed MAC")
-	}
-
-	if len(scanner.unique) != 1 {
-		t.Errorf("Host is not registered to unique registry")
-	}
-
-	if _, ok := scanner.unique[host.ID()]; !ok {
-		t.Errorf("Host is not registered to unique registry")
-	}
-}
-
-func TestScanner_HasHost(t *testing.T) {
-	scanner := NewScanner()
-	if scanner == nil {
-		t.Errorf("Scanner instance is empty")
-		return
-	}
-
-	host := Host{
-		IP:  "127.0.0.1",
-		MAC: "ff:ff:ff:ff:ff:ff",
-	}
-
-	if scanner.hasHost(&host) {
-		t.Errorf("Host is wrongly detected as already added")
-	}
-
-	scanner.addHost(&host)
-
-	if !scanner.hasHost(&host) {
-		t.Errorf("Host is not registered as already addded")
-	}
 }

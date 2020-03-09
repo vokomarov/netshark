@@ -2,4 +2,4 @@
 .PHONY: test
 
 test:
-	go test -v ./...
+	sudo go test ./... -v -covermode=count
