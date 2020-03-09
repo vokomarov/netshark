@@ -12,7 +12,7 @@ install:
   - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.23.6
 
 script:
-  - sudo go test ./... -v -covermode=count -coverprofile=coverage.out
+  - sudo $(which go) test ./... -v -covermode=count -coverprofile=coverage.out
   - cat coverage.out | grep -v "main.go" | grep -v "hosts.go" | grep -v "ports.go" > cover.out
   - goveralls -coverprofile=cover.out -service=travis-ci
   - golangci-lint run
