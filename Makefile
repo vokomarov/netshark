@@ -2,4 +2,4 @@
 .PHONY: test
 
 test:
-	sudo go test ./scanner/... -v -covermode=count
+	sudo go test ./... -v -covermode=count
